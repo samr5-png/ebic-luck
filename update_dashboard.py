@@ -59,7 +59,7 @@ def build_dashboard():
 
     sched_df = pd.DataFrame(games)
 
-    # --- 2. REPLAY SEASON WEEK-BY-WEEK FOR HISTORICAL PLAYOFF & LAST-PLACE ODDS ---
+    # --- 2. REPLAY SEASON WEEK-BY-WEEK WITH EMPIRICAL BAYES SHRINKAGE ---
     rng = np.random.default_rng(42)
     week_labels = []
     playoff_history = {tid: [] for tid in team_ids}
@@ -73,6 +73,7 @@ def build_dashboard():
         wins = np.zeros(num_teams)
         pf = np.zeros(num_teams)
         scores_by_idx = {i: [] for i in range(num_teams)}
+        all_past_scores = []
 
         for _, r in past_games.iterrows():
             h, a = id_to_idx[r["home_id"]], id_to_idx[r["away_id"]]
@@ -81,6 +82,7 @@ def build_dashboard():
             pf[a] += ap
             scores_by_idx[h].append(hp)
             scores_by_idx[a].append(ap)
+            all_past_scores.extend([hp, ap])
             if hp > ap:
                 wins[h] += 1.0
             elif ap > hp:
@@ -89,9 +91,28 @@ def build_dashboard():
                 wins[h] += 0.5
                 wins[a] += 0.5
 
-        means = np.array([np.mean(scores_by_idx[i]) if scores_by_idx[i] else 125.0 for i in range(num_teams)])
-        stds = np.array([np.std(scores_by_idx[i], ddof=1) if len(scores_by_idx[i]) > 1 else 22.0 for i in range(num_teams)])
-        stds = np.where((stds == 0) | np.isnan(stds), 22.0, stds)
+        # League-wide scoring baseline for Bayesian regression to the mean
+        league_mean = float(np.mean(all_past_scores)) if all_past_scores else 125.0
+        league_var = float(np.var(all_past_scores, ddof=1)) if len(all_past_scores) > 1 else 23.0**2
+        league_var = max(league_var, 18.0**2)
+
+        # Shrink early-week team means (prior weight = 4 games) & variances (prior weight = 5 games)
+        k_mean = 4.0
+        k_var = 5.0
+        means = np.zeros(num_teams)
+        stds = np.zeros(num_teams)
+
+        for i in range(num_teams):
+            n = len(scores_by_idx[i])
+            if n == 0:
+                means[i] = league_mean
+                stds[i] = np.sqrt(league_var)
+            else:
+                raw_mean = np.mean(scores_by_idx[i])
+                means[i] = (n * raw_mean + k_mean * league_mean) / (n + k_mean)
+                raw_var = np.var(scores_by_idx[i], ddof=1) if n > 1 else league_var
+                shrunk_var = ((max(0, n - 1) * raw_var) + (k_var * league_var)) / (max(0, n - 1) + k_var)
+                stds[i] = max(np.sqrt(shrunk_var), 12.0)
 
         curr_projs = np.zeros(num_teams)
         curr_lives = np.zeros(num_teams)
@@ -101,7 +122,7 @@ def build_dashboard():
                 curr_projs[id_to_idx[r["away_id"]]] = r["away_proj"]
                 curr_lives[id_to_idx[r["home_id"]]] = r["home_live"]
                 curr_lives[id_to_idx[r["away_id"]]] = r["away_live"]
-            blended_means = 0.60 * means + 0.40 * np.where(curr_projs > 0, curr_projs, means)
+            blended_means = 0.65 * means + 0.35 * np.where(curr_projs > 0, curr_projs, means)
         else:
             blended_means = means
 
@@ -189,7 +210,7 @@ def build_dashboard():
     summary["last_place_pct"] = summary["team_id"].map(lambda tid: final_last_pct[id_to_idx[tid]])
     summary = summary.sort_values(["playoff_pct", "wins", "pf"], ascending=[False, False, False]).reset_index(drop=True)
 
-    # --- 4. PREPARE CHART.JS DATASETS (CONSISTENT TEAM COLORS) ---
+    # --- 4. PREPARE CHART.JS DATASETS ---
     palette = [
         "#2563eb", "#dc2626", "#16a34a", "#d97706",
         "#7c3aed", "#0891b2", "#db2777", "#475569"
