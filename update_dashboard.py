@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 import requests
@@ -34,7 +35,10 @@ def build_dashboard():
         t["id"]: f"{t.get('location', '')} {t.get('nickname', '')}".strip() or t.get("name", f"Team {t['id']}")
         for t in data["teams"]
     }
+    team_ids = sorted(teams.keys())
+    id_to_idx = {tid: i for i, tid in enumerate(team_ids)}
 
+    # --- 1. PARSE FULL SEASON SCHEDULE, LIVE POINTS & ESPN PROJECTIONS ---
     games = []
     for m in data["schedule"]:
         week = m["matchupPeriodId"]
@@ -54,6 +58,87 @@ def build_dashboard():
         })
 
     sched_df = pd.DataFrame(games)
+
+    # --- 2. REPLAY SEASON WEEK-BY-WEEK FOR HISTORICAL LAST-PLACE ODDS ---
+    rng = np.random.default_rng(42)
+    week_labels = []
+    last_place_history = {tid: [] for tid in team_ids}
+
+    for w_eval in range(1, current_week + 1):
+        is_live_week = (w_eval == current_week)
+        cutoff = w_eval - 1 if is_live_week else w_eval
+        past_games = sched_df[sched_df["week"] <= cutoff]
+
+        wins = np.zeros(num_teams)
+        pf = np.zeros(num_teams)
+        scores_by_idx = {i: [] for i in range(num_teams)}
+
+        for _, r in past_games.iterrows():
+            h, a = id_to_idx[r["home_id"]], id_to_idx[r["away_id"]]
+            hp, ap = r["home_live"], r["away_live"]
+            pf[h] += hp
+            pf[a] += ap
+            scores_by_idx[h].append(hp)
+            scores_by_idx[a].append(ap)
+            if hp > ap:
+                wins[h] += 1.0
+            elif ap > hp:
+                wins[a] += 1.0
+            else:
+                wins[h] += 0.5
+                wins[a] += 0.5
+
+        means = np.array([np.mean(scores_by_idx[i]) if scores_by_idx[i] else 125.0 for i in range(num_teams)])
+        stds = np.array([np.std(scores_by_idx[i], ddof=1) if len(scores_by_idx[i]) > 1 else 22.0 for i in range(num_teams)])
+        stds = np.where((stds == 0) | np.isnan(stds), 22.0, stds)
+
+        # Grab ESPN projections if evaluating the active live week
+        curr_projs = np.zeros(num_teams)
+        curr_lives = np.zeros(num_teams)
+        if is_live_week:
+            for _, r in sched_df[sched_df["week"] == current_week].iterrows():
+                curr_projs[id_to_idx[r["home_id"]]] = r["home_proj"]
+                curr_projs[id_to_idx[r["away_id"]]] = r["away_proj"]
+                curr_lives[id_to_idx[r["home_id"]]] = r["home_live"]
+                curr_lives[id_to_idx[r["away_id"]]] = r["away_live"]
+            blended_means = 0.60 * means + 0.40 * np.where(curr_projs > 0, curr_projs, means)
+        else:
+            blended_means = means
+
+        sim_w = np.tile(wins, (N_SIMULATIONS, 1))
+        sim_pf = np.tile(pf, (N_SIMULATIONS, 1))
+
+        for _, r in sched_df[sched_df["week"] > cutoff].iterrows():
+            h, a = id_to_idx[r["home_id"]], id_to_idx[r["away_id"]]
+            if is_live_week and r["week"] == current_week:
+                h_rem = max(0.0, (curr_projs[h] - curr_lives[h]) / max(curr_projs[h], 1.0))
+                a_rem = max(0.0, (curr_projs[a] - curr_lives[a]) / max(curr_projs[a], 1.0))
+                hs = np.maximum(rng.normal(curr_projs[h], stds[h] * np.sqrt(h_rem), N_SIMULATIONS), curr_lives[h])
+                as_ = np.maximum(rng.normal(curr_projs[a], stds[a] * np.sqrt(a_rem), N_SIMULATIONS), curr_lives[a])
+            else:
+                hs = rng.normal(blended_means[h], stds[h], N_SIMULATIONS)
+                as_ = rng.normal(blended_means[a], stds[a], N_SIMULATIONS)
+
+            sim_pf[:, h] += hs
+            sim_pf[:, a] += as_
+            sim_w[:, h] += (hs > as_).astype(float)
+            sim_w[:, a] += (as_ > hs).astype(float)
+
+        order = np.lexsort((-sim_pf, -sim_w))
+        ranks = np.argsort(order, axis=1)
+        last_pcts = (ranks == (num_teams - 1)).mean(axis=0) * 100
+
+        week_labels.append(f"Wk {w_eval} (Live)" if is_live_week else f"Wk {w_eval}")
+        for tid in team_ids:
+            last_place_history[tid].append(round(float(last_pcts[id_to_idx[tid]]), 1))
+
+        # Save final week's full projections for the main standings table
+        if is_live_week:
+            final_proj_wins = sim_w.mean(axis=0)
+            final_playoff_pct = (ranks < PLAYOFF_SPOTS).mean(axis=0) * 100
+            final_last_pct = last_pcts
+
+    # --- 3. COMPUTE LIVE LUCK & WEEKLY LUCK DELTA ---
     weekly_rows = []
     for _, row in sched_df[sched_df["played"]].iterrows():
         w, h_id, a_id = row["week"], row["home_id"], row["away_id"]
@@ -68,8 +153,7 @@ def build_dashboard():
     if not prior_df.empty:
         prior_summary = prior_df.groupby("team_id").agg(
             prior_games=("week", "count"), prior_wins=("actual_win", "sum"),
-            prior_pf=("pf", "sum"), prior_pa=("pa", "sum"),
-            hist_mean_pf=("pf", "mean"), hist_std_pf=("pf", "std")
+            prior_pf=("pf", "sum"), prior_pa=("pa", "sum")
         ).reset_index()
         prior_avg_pa = prior_summary["prior_pa"].mean()
         prior_summary["prior_exp"] = prior_summary["prior_games"] * (
@@ -77,7 +161,7 @@ def build_dashboard():
         )
         prior_summary["prior_luck"] = prior_summary["prior_wins"] - prior_summary["prior_exp"]
     else:
-        prior_summary = pd.DataFrame({"team_id": list(teams.keys()), "prior_luck": 0.0, "hist_mean_pf": 125.0, "hist_std_pf": 22.0})
+        prior_summary = pd.DataFrame({"team_id": team_ids, "prior_luck": 0.0})
 
     live_summary = weekly_df.groupby(["team_id", "team"]).agg(
         games=("week", "count"), wins=("actual_win", "sum"), pf=("pf", "sum"), pa=("pa", "sum")
@@ -89,10 +173,7 @@ def build_dashboard():
     )
     live_summary["live_luck"] = live_summary["wins"] - live_summary["exp_wins"]
 
-    summary = pd.merge(
-        live_summary, prior_summary[["team_id", "prior_luck", "hist_mean_pf", "hist_std_pf"]],
-        on="team_id", how="left"
-    ).fillna({"prior_luck": 0.0, "hist_mean_pf": 125.0, "hist_std_pf": 22.0})
+    summary = pd.merge(live_summary, prior_summary[["team_id", "prior_luck"]], on="team_id", how="left").fillna({"prior_luck": 0.0})
     summary["luck_delta"] = summary["live_luck"] - summary["prior_luck"]
 
     curr_rows = []
@@ -101,47 +182,33 @@ def build_dashboard():
         curr_rows.append({"team_id": row["away_id"], "wk_live": row["away_live"], "wk_opp_live": row["home_live"], "wk_proj": row["away_proj"], "wk_win": 1.0 if row["away_live"] > row["home_live"] else (0.5 if row["away_live"] == row["home_live"] else 0.0)})
     summary = pd.merge(summary, pd.DataFrame(curr_rows), on="team_id", how="left").fillna(0.0)
 
-    team_ids = summary["team_id"].tolist()
-    id_to_idx = {tid: i for i, tid in enumerate(team_ids)}
-
-    if not prior_df.empty:
-        base_df = summary.merge(prior_summary[["team_id", "prior_wins", "prior_pf"]], on="team_id")
-        sim_wins = np.tile(base_df["prior_wins"].values.astype(float), (N_SIMULATIONS, 1))
-        sim_pf = np.tile(base_df["prior_pf"].values.astype(float), (N_SIMULATIONS, 1))
-    else:
-        sim_wins = np.zeros((N_SIMULATIONS, num_teams))
-        sim_pf = np.zeros((N_SIMULATIONS, num_teams))
-
-    stds = summary["hist_std_pf"].replace(0, 22.0).values
-    hist_means = summary["hist_mean_pf"].values
-    curr_projs = summary["wk_proj"].values
-    curr_lives = summary["wk_live"].values
-    blended_future_means = 0.60 * hist_means + 0.40 * np.where(curr_projs > 0, curr_projs, hist_means)
-
-    rng = np.random.default_rng(42)
-    for _, row in sched_df[sched_df["week"] >= current_week].iterrows():
-        h_idx, a_idx = id_to_idx[row["home_id"]], id_to_idx[row["away_id"]]
-        if row["week"] == current_week:
-            h_rem = max(0.0, (curr_projs[h_idx] - curr_lives[h_idx]) / max(curr_projs[h_idx], 1.0))
-            a_rem = max(0.0, (curr_projs[a_idx] - curr_lives[a_idx]) / max(curr_projs[a_idx], 1.0))
-            h_scores = np.maximum(rng.normal(curr_projs[h_idx], stds[h_idx] * np.sqrt(h_rem), N_SIMULATIONS), curr_lives[h_idx])
-            a_scores = np.maximum(rng.normal(curr_projs[a_idx], stds[a_idx] * np.sqrt(a_rem), N_SIMULATIONS), curr_lives[a_idx])
-        else:
-            h_scores = rng.normal(blended_future_means[h_idx], stds[h_idx], N_SIMULATIONS)
-            a_scores = rng.normal(blended_future_means[a_idx], stds[a_idx], N_SIMULATIONS)
-
-        sim_pf[:, h_idx] += h_scores
-        sim_pf[:, a_idx] += a_scores
-        sim_wins[:, h_idx] += (h_scores > a_scores).astype(float)
-        sim_wins[:, a_idx] += (a_scores > h_scores).astype(float)
-
-    order = np.lexsort((-sim_pf, -sim_wins))
-    ranks = np.argsort(order, axis=1)
-    summary["proj_wins"] = sim_wins.mean(axis=0)
-    summary["playoff_pct"] = (ranks < PLAYOFF_SPOTS).mean(axis=0) * 100
-    summary["last_place_pct"] = (ranks == (num_teams - 1)).mean(axis=0) * 100
+    # Attach final week Monte Carlo metrics
+    summary["proj_wins"] = summary["team_id"].map(lambda tid: final_proj_wins[id_to_idx[tid]])
+    summary["playoff_pct"] = summary["team_id"].map(lambda tid: final_playoff_pct[id_to_idx[tid]])
+    summary["last_place_pct"] = summary["team_id"].map(lambda tid: final_last_pct[id_to_idx[tid]])
     summary = summary.sort_values(["playoff_pct", "wins", "pf"], ascending=[False, False, False]).reset_index(drop=True)
 
+    # --- 4. PREPARE CHART.JS DATASETS ---
+    palette = [
+        "#2563eb", "#dc2626", "#16a34a", "#d97706",
+        "#7c3aed", "#0891b2", "#db2777", "#475569"
+    ]
+    chart_datasets = []
+    # Sort legend by current Last Place % descending so biggest contenders appear first
+    for i, (_, r) in enumerate(summary.sort_values("last_place_pct", ascending=False).iterrows()):
+        tid = r["team_id"]
+        chart_datasets.append({
+            "label": r["team"],
+            "data": last_place_history[tid],
+            "borderColor": palette[i % len(palette)],
+            "backgroundColor": palette[i % len(palette)],
+            "borderWidth": 2.5,
+            "pointRadius": 4,
+            "tension": 0.25,
+            "fill": False
+        })
+
+    # --- 5. BUILD HTML ---
     def fmt_rec(w, l):
         return f"{int(w)}-{int(l)}" if w % 1 == 0 else f"{w:.1f}-{l:.1f}"
 
@@ -180,10 +247,13 @@ def build_dashboard():
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="300">
   <title>EBIC 2026-7 Live Luck & Playoff Odds</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #1e293b; margin: 0; padding: 16px; }}
-    .card {{ max-width: 1150px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); padding: 20px; overflow-x: auto; }}
-    h1 {{ margin: 0 0 6px 0; font-size: 20px; color: #0f172a; }}
+    .card {{ max-width: 1150px; margin: 0 auto 20px auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); padding: 20px; overflow-x: auto; }}
+    h1, h2 {{ margin: 0 0 6px 0; color: #0f172a; }}
+    h1 {{ font-size: 20px; }}
+    h2 {{ font-size: 17px; }}
     .sub {{ color: #64748b; font-size: 12px; margin-bottom: 16px; }}
     table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 850px; }}
     th {{ background: #0f172a; color: #fff; padding: 10px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }}
@@ -191,6 +261,7 @@ def build_dashboard():
     td {{ padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }}
     tr:hover {{ background: #f8fafc; }}
     .footer {{ margin-top: 14px; font-size: 11px; color: #64748b; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }}
+    .chart-box {{ position: relative; height: 380px; width: 100%; }}
   </style>
 </head>
 <body>
@@ -213,6 +284,48 @@ def build_dashboard():
       <span><strong>Wk {current_week} Luck &Delta;:</strong> Net luck added/removed since end of Week {max(1, current_week - 1)}</span>
     </div>
   </div>
+
+  <div class="card">
+    <h2>Race for Last Place — Historical Odds Over the Season</h2>
+    <div class="sub">Simulated probability of finishing 8th (Last Place) at the end of each week &bull; Click any team in the legend to toggle</div>
+    <div class="chart-box">
+      <canvas id="lastPlaceChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const ctx = document.getElementById('lastPlaceChart').getContext('2d');
+    new Chart(ctx, {{
+      type: 'line',
+      data: {{
+        labels: {json.dumps(week_labels)},
+        datasets: {json.dumps(chart_datasets)}
+      }},
+      options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {{ mode: 'index', intersect: false }},
+        plugins: {{
+          legend: {{ position: 'bottom', labels: {{ usePointStyle: true, padding: 16 }} }},
+          tooltip: {{
+            callbacks: {{
+              label: function(context) {{
+                return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '%';
+              }}
+            }}
+          }}
+        }},
+        scales: {{
+          y: {{
+            min: 0,
+            max: 100,
+            title: {{ display: true, text: 'Last-Place Probability (%)' }},
+            ticks: {{ callback: function(value) {{ return value + '%'; }} }}
+          }}
+        }}
+      }}
+    }});
+  </script>
 </body>
 </html>"""
     Path("index.html").write_text(html, encoding="utf-8")
