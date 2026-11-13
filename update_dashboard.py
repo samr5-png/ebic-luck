@@ -59,9 +59,10 @@ def build_dashboard():
 
     sched_df = pd.DataFrame(games)
 
-    # --- 2. REPLAY SEASON WEEK-BY-WEEK FOR HISTORICAL LAST-PLACE ODDS ---
+    # --- 2. REPLAY SEASON WEEK-BY-WEEK FOR HISTORICAL PLAYOFF & LAST-PLACE ODDS ---
     rng = np.random.default_rng(42)
     week_labels = []
+    playoff_history = {tid: [] for tid in team_ids}
     last_place_history = {tid: [] for tid in team_ids}
 
     for w_eval in range(1, current_week + 1):
@@ -92,7 +93,6 @@ def build_dashboard():
         stds = np.array([np.std(scores_by_idx[i], ddof=1) if len(scores_by_idx[i]) > 1 else 22.0 for i in range(num_teams)])
         stds = np.where((stds == 0) | np.isnan(stds), 22.0, stds)
 
-        # Grab ESPN projections if evaluating the active live week
         curr_projs = np.zeros(num_teams)
         curr_lives = np.zeros(num_teams)
         if is_live_week:
@@ -126,16 +126,18 @@ def build_dashboard():
 
         order = np.lexsort((-sim_pf, -sim_w))
         ranks = np.argsort(order, axis=1)
+        playoff_pcts = (ranks < PLAYOFF_SPOTS).mean(axis=0) * 100
         last_pcts = (ranks == (num_teams - 1)).mean(axis=0) * 100
 
         week_labels.append(f"Wk {w_eval} (Live)" if is_live_week else f"Wk {w_eval}")
         for tid in team_ids:
-            last_place_history[tid].append(round(float(last_pcts[id_to_idx[tid]]), 1))
+            idx = id_to_idx[tid]
+            playoff_history[tid].append(round(float(playoff_pcts[idx]), 1))
+            last_place_history[tid].append(round(float(last_pcts[idx]), 1))
 
-        # Save final week's full projections for the main standings table
         if is_live_week:
             final_proj_wins = sim_w.mean(axis=0)
-            final_playoff_pct = (ranks < PLAYOFF_SPOTS).mean(axis=0) * 100
+            final_playoff_pct = playoff_pcts
             final_last_pct = last_pcts
 
     # --- 3. COMPUTE LIVE LUCK & WEEKLY LUCK DELTA ---
@@ -182,26 +184,40 @@ def build_dashboard():
         curr_rows.append({"team_id": row["away_id"], "wk_live": row["away_live"], "wk_opp_live": row["home_live"], "wk_proj": row["away_proj"], "wk_win": 1.0 if row["away_live"] > row["home_live"] else (0.5 if row["away_live"] == row["home_live"] else 0.0)})
     summary = pd.merge(summary, pd.DataFrame(curr_rows), on="team_id", how="left").fillna(0.0)
 
-    # Attach final week Monte Carlo metrics
     summary["proj_wins"] = summary["team_id"].map(lambda tid: final_proj_wins[id_to_idx[tid]])
     summary["playoff_pct"] = summary["team_id"].map(lambda tid: final_playoff_pct[id_to_idx[tid]])
     summary["last_place_pct"] = summary["team_id"].map(lambda tid: final_last_pct[id_to_idx[tid]])
     summary = summary.sort_values(["playoff_pct", "wins", "pf"], ascending=[False, False, False]).reset_index(drop=True)
 
-    # --- 4. PREPARE CHART.JS DATASETS ---
+    # --- 4. PREPARE CHART.JS DATASETS (CONSISTENT TEAM COLORS) ---
     palette = [
         "#2563eb", "#dc2626", "#16a34a", "#d97706",
         "#7c3aed", "#0891b2", "#db2777", "#475569"
     ]
-    chart_datasets = []
-    # Sort legend by current Last Place % descending so biggest contenders appear first
-    for i, (_, r) in enumerate(summary.sort_values("last_place_pct", ascending=False).iterrows()):
+    team_colors = {tid: palette[i % len(palette)] for i, tid in enumerate(team_ids)}
+
+    playoff_datasets = []
+    for _, r in summary.sort_values("playoff_pct", ascending=False).iterrows():
         tid = r["team_id"]
-        chart_datasets.append({
+        playoff_datasets.append({
+            "label": r["team"],
+            "data": playoff_history[tid],
+            "borderColor": team_colors[tid],
+            "backgroundColor": team_colors[tid],
+            "borderWidth": 2.5,
+            "pointRadius": 4,
+            "tension": 0.25,
+            "fill": False
+        })
+
+    last_place_datasets = []
+    for _, r in summary.sort_values("last_place_pct", ascending=False).iterrows():
+        tid = r["team_id"]
+        last_place_datasets.append({
             "label": r["team"],
             "data": last_place_history[tid],
-            "borderColor": palette[i % len(palette)],
-            "backgroundColor": palette[i % len(palette)],
+            "borderColor": team_colors[tid],
+            "backgroundColor": team_colors[tid],
             "borderWidth": 2.5,
             "pointRadius": 4,
             "tension": 0.25,
@@ -286,45 +302,60 @@ def build_dashboard():
   </div>
 
   <div class="card">
+    <h2>Playoff Race — Historical Playoff Odds Over the Season</h2>
+    <div class="sub">Simulated probability of finishing Top {PLAYOFF_SPOTS} at the end of each week &bull; Click any team in the legend to toggle</div>
+    <div class="chart-box">
+      <canvas id="playoffChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Race for Last Place — Historical Odds Over the Season</h2>
-    <div class="sub">Simulated probability of finishing 8th (Last Place) at the end of each week &bull; Click any team in the legend to toggle</div>
+    <div class="sub">Simulated probability of finishing {num_teams}th (Last Place) at the end of each week &bull; Click any team in the legend to toggle</div>
     <div class="chart-box">
       <canvas id="lastPlaceChart"></canvas>
     </div>
   </div>
 
   <script>
-    const ctx = document.getElementById('lastPlaceChart').getContext('2d');
-    new Chart(ctx, {{
-      type: 'line',
-      data: {{
-        labels: {json.dumps(week_labels)},
-        datasets: {json.dumps(chart_datasets)}
-      }},
-      options: {{
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {{ mode: 'index', intersect: false }},
-        plugins: {{
-          legend: {{ position: 'bottom', labels: {{ usePointStyle: true, padding: 16 }} }},
-          tooltip: {{
-            callbacks: {{
-              label: function(context) {{
-                return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '%';
+    const weekLabels = {json.dumps(week_labels)};
+
+    function buildChart(canvasId, datasets, yAxisTitle) {{
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      new Chart(ctx, {{
+        type: 'line',
+        data: {{
+          labels: weekLabels,
+          datasets: datasets
+        }},
+        options: {{
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {{ mode: 'index', intersect: false }},
+          plugins: {{
+            legend: {{ position: 'bottom', labels: {{ usePointStyle: true, padding: 16 }} }},
+            tooltip: {{
+              callbacks: {{
+                label: function(context) {{
+                  return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '%';
+                }}
               }}
             }}
-          }}
-        }},
-        scales: {{
-          y: {{
-            min: 0,
-            max: 100,
-            title: {{ display: true, text: 'Last-Place Probability (%)' }},
-            ticks: {{ callback: function(value) {{ return value + '%'; }} }}
+          }},
+          scales: {{
+            y: {{
+              min: 0,
+              max: 100,
+              title: {{ display: true, text: yAxisTitle }},
+              ticks: {{ callback: function(value) {{ return value + '%'; }} }}
+            }}
           }}
         }}
-      }}
-    }});
+      }});
+    }}
+
+    buildChart('playoffChart', {json.dumps(playoff_datasets)}, 'Playoff Probability (%)');
+    buildChart('lastPlaceChart', {json.dumps(last_place_datasets)}, 'Last-Place Probability (%)');
   </script>
 </body>
 </html>"""
