@@ -17,10 +17,35 @@ COOKIES = {
     "espn_s2": os.environ.get("ESPN_S2", "")
 }
 
+# Added &view=mRoster so starting lineup projections populate even before games kick off
 URL = (
     f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{SEASON}"
-    f"/segments/0/leagues/{LEAGUE_ID}?view=mTeam&view=mMatchup&view=mMatchupScore"
+    f"/segments/0/leagues/{LEAGUE_ID}?view=mTeam&view=mMatchup&view=mMatchupScore&view=mRoster"
 )
+
+def get_starting_lineup_projections(data, current_week):
+    """Sum active starters' actual (if played) or projected (if unplayed) points from mRoster."""
+    roster_projs = {}
+    for t in data.get("teams", []):
+        tid = t["id"]
+        entries = t.get("roster", {}).get("entries", [])
+        total_proj = 0.0
+        for entry in entries:
+            # 20 = Bench, 21 = IR; everything else is an active starter slot
+            if entry.get("lineupSlotId") in (20, 21):
+                continue
+            player = entry.get("playerPoolEntry", {}).get("player", {})
+            actual_pts = None
+            proj_pts = 0.0
+            for st in player.get("stats", []):
+                if st.get("scoringPeriodId") == current_week:
+                    if st.get("statSourceId") == 0:
+                        actual_pts = float(st.get("appliedTotal", 0.0))
+                    elif st.get("statSourceId") == 1:
+                        proj_pts = float(st.get("appliedTotal", 0.0))
+            total_proj += actual_pts if actual_pts is not None else proj_pts
+        roster_projs[tid] = round(total_proj, 2)
+    return roster_projs
 
 def build_dashboard():
     active_cookies = {k: v for k, v in COOKIES.items() if v}
@@ -38,7 +63,10 @@ def build_dashboard():
     team_ids = sorted(teams.keys())
     id_to_idx = {tid: i for i, tid in enumerate(team_ids)}
 
-    # --- 1. PARSE FULL SEASON SCHEDULE, LIVE POINTS & ESPN PROJECTIONS ---
+    # Calculate true active-starter projections for current_week
+    roster_projs = get_starting_lineup_projections(data, current_week)
+
+    # --- 1. PARSE FULL SEASON SCHEDULE, LIVE POINTS & STARTER PROJECTIONS ---
     games = []
     for m in data["schedule"]:
         week = m["matchupPeriodId"]
@@ -47,8 +75,10 @@ def build_dashboard():
         h_id, a_id = m["home"]["teamId"], m["away"]["teamId"]
         h_live = float(m["home"].get("totalPointsLive", m["home"].get("totalPoints", 0.0)))
         a_live = float(m["away"].get("totalPointsLive", m["away"].get("totalPoints", 0.0)))
-        h_proj = float(m["home"].get("totalProjectedPointsLive", h_live))
-        a_proj = float(m["away"].get("totalProjectedPointsLive", a_live))
+
+        # Prefer ESPN's live in-game projection if active; otherwise use active starter sum from mRoster
+        h_proj = float(m["home"].get("totalProjectedPointsLive") or roster_projs.get(h_id, h_live))
+        a_proj = float(m["away"].get("totalProjectedPointsLive") or roster_projs.get(a_id, a_live))
 
         games.append({
             "week": week, "home_id": h_id, "away_id": a_id,
@@ -91,12 +121,10 @@ def build_dashboard():
                 wins[h] += 0.5
                 wins[a] += 0.5
 
-        # League-wide scoring baseline for Bayesian regression to the mean
         league_mean = float(np.mean(all_past_scores)) if all_past_scores else 125.0
         league_var = float(np.var(all_past_scores, ddof=1)) if len(all_past_scores) > 1 else 23.0**2
         league_var = max(league_var, 18.0**2)
 
-        # Shrink early-week team means (prior weight = 4 games) & variances (prior weight = 5 games)
         k_mean = 4.0
         k_var = 5.0
         means = np.zeros(num_teams)
