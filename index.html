@@ -6,12 +6,13 @@
   <meta http-equiv="refresh" content="300">
   <title>EBIC 2026-7 Analytics Hub</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #1e293b; margin: 0; padding: 0; }
     .navbar { background: #0f172a; color: #fff; padding: 14px 20px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
     .nav-inner { max-width: 1150px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .brand { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
-    .nav-tabs { display: flex; gap: 8px; }
+    .nav-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
     .main-tab { padding: 8px 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
     .main-tab:hover { background: #334155; color: #fff; }
     .main-tab.active { background: #2563eb; color: #ffffff; border-color: #2563eb; }
@@ -21,7 +22,7 @@
     h1 { font-size: 20px; }
     h2 { font-size: 17px; }
     .sub { color: #64748b; font-size: 12px; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 850px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 650px; }
     th { background: #0f172a; color: #fff; padding: 10px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
     th:nth-child(2) { text-align: left; }
     td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }
@@ -33,6 +34,7 @@
     .sub-tab { padding: 7px 13px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; }
     .sub-tab.active { background: #0f172a; color: #ffffff; border-color: #0f172a; }
     select { padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: 600; color: #0f172a; background: #f8fafc; }
+    #tradeWebNet { width: 100%; height: 460px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fafafa; }
   </style>
 </head>
 <body>
@@ -42,6 +44,7 @@
       <div class="nav-tabs">
         <button class="main-tab active" onclick="switchPage('luckPage', this)">Luck &amp; Playoff Odds</button>
         <button class="main-tab" onclick="switchPage('txPage', this)">Trades &amp; Waiver Wire</button>
+        <button class="main-tab" onclick="switchPage('webPage', this)">Trade Web &amp; Hot Potatoes</button>
       </div>
     </div>
   </div>
@@ -51,7 +54,7 @@
     <div id="luckPage">
       <div class="card">
         <h1>Live Luck &amp; Playoff Projections (Week 10)</h1>
-        <div class="sub">Last Synced: Nov 15, 2026 03:20 UTC &bull; Auto-refreshes every 5 min &bull; 10,000 Monte Carlo Sims (Top 4 Playoffs, PF Tiebreaker)</div>
+        <div class="sub">Last Synced: Nov 15, 2026 03:53 UTC &bull; Auto-refreshes every 5 min &bull; 10,000 Monte Carlo Sims (Top 4 Playoffs, PF Tiebreaker)</div>
         <table>
           <thead>
             <tr>
@@ -85,11 +88,11 @@
             <td>1201.88</td>
             <td>1017.42</td>
             <td><span style="color:#64748b;font-weight:600;">0.00 - 0.00</span></td>
-            <td style="font-weight:600;color:#334155;">131.79</td>
+            <td style="font-weight:600;color:#334155;">131.85</td>
             <td>5.37</td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+1.13</span></td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.02</span></td>
-            <td style="font-weight:600;">8.53</td>
+            <td style="font-weight:600;">8.54</td>
             <td style="font-weight:700;color:#1d4ed8;">90.9%</td>
             <td style="font-weight:700;color:#475569;">0.0%</td>
         </tr>
@@ -101,7 +104,7 @@
             <td>1250.24</td>
             <td>1263.72</td>
             <td><span style="color:#b91c1c;font-weight:600;">0.00 - 27.70</span></td>
-            <td style="font-weight:600;color:#334155;">132.56</td>
+            <td style="font-weight:600;color:#334155;">132.51</td>
             <td>5.76</td>
             <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 8px;border-radius:6px;font-weight:600;">-0.76</span></td>
             <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 8px;border-radius:6px;font-weight:600;">-0.52</span></td>
@@ -117,7 +120,7 @@
             <td>1209.30</td>
             <td>1138.04</td>
             <td><span style="color:#64748b;font-weight:600;">0.00 - 0.00</span></td>
-            <td style="font-weight:600;color:#334155;">137.88</td>
+            <td style="font-weight:600;color:#334155;">137.89</td>
             <td>5.43</td>
             <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 8px;border-radius:6px;font-weight:600;">-0.93</span></td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.01</span></td>
@@ -133,7 +136,7 @@
             <td>1177.62</td>
             <td>1199.74</td>
             <td><span style="color:#64748b;font-weight:600;">0.00 - 0.00</span></td>
-            <td style="font-weight:600;color:#334155;">132.88</td>
+            <td style="font-weight:600;color:#334155;">132.83</td>
             <td>5.17</td>
             <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 8px;border-radius:6px;font-weight:600;">-0.67</span></td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.04</span></td>
@@ -149,7 +152,7 @@
             <td>1038.66</td>
             <td>1063.82</td>
             <td><span style="color:#64748b;font-weight:600;">0.00 - 0.00</span></td>
-            <td style="font-weight:600;color:#334155;">124.07</td>
+            <td style="font-weight:600;color:#334155;">124.06</td>
             <td>3.93</td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.57</span></td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.16</span></td>
@@ -181,11 +184,11 @@
             <td>1008.26</td>
             <td>1145.10</td>
             <td><span style="color:#15803d;font-weight:600;">27.70 - 0.00</span></td>
-            <td style="font-weight:600;color:#334155;">140.37</td>
+            <td style="font-weight:600;color:#334155;">140.35</td>
             <td>3.65</td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.35</span></td>
             <td><span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-weight:600;">+0.46</span></td>
-            <td style="font-weight:600;">5.35</td>
+            <td style="font-weight:600;">5.34</td>
             <td style="font-weight:700;color:#1d4ed8;">4.1%</td>
             <td style="font-weight:700;color:#b91c1c;">42.1%</td>
         </tr>
@@ -4634,14 +4637,182 @@
             </div>
       </div>
     </div>
+
+    <!-- TAB 3: TRADE WEB & MOST TRADED PLAYERS -->
+    <div id="webPage" style="display:none;">
+      <div class="card">
+        <h1>Manager Trade Partner Web (25 Trades)</h1>
+        <div class="sub">Line thickness and labels show total deals completed between each pair of managers &bull; Drag nodes to rearrange</div>
+        <div id="tradeWebNet"></div>
+      </div>
+
+      <div class="card">
+        <h2>Most-Traded Players ("Hot Potatoes")</h2>
+        <div class="sub">Players dealt 2 or more times this season with their chronological ownership path</div>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;">Player</th>
+              <th>Times Traded</th>
+              <th style="text-align:left;">Ownership Chain</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Justin Jefferson</td>
+          <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">4x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Drake Maye Believers</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 3)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 4)</span> <strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 5)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>The Sam Obliterators </strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Nico Collins</td>
+          <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">4x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 5)</span> <strong>Nathan's Nifty Team</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 6)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>MVPete</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>Mark's Magnificent Munch</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Derrick Henry</td>
+          <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">3x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 3)</span> <strong>Drake Maye Believers</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>MVPete</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Javonte Williams</td>
+          <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">3x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 4)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 6)</span> <strong>Nathan's Nifty Team</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>Believe Dat</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Rashee Rice</td>
+          <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">3x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>MVPete</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>Believe Dat</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Tee Higgins</td>
+          <td><span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">3x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>Believe Dat</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>The Sam Obliterators </strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">A.J. Brown</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 9)</span> <strong>Walkin' On Sunshine</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Aaron Jones Sr.</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>MVPete</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>The Sam Obliterators </strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Breece Hall</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>MVPete</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Bucky Irving</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Drake Maye Believers</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 3)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 4)</span> <strong>Walkin' On Sunshine</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Carnell Tate</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Walkin' On Sunshine</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">David Montgomery</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Nathan's Nifty Team</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 6)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>The Sam Obliterators </strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Ja'Marr Chase</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 4)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 5)</span> <strong>Walkin' On Sunshine</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Jaylen Warren</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>MVPete</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 4)</span> <strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>Believe Dat</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Jeremiyah Love</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Nathan's Nifty Team</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 5)</span> <strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Repeat Offender</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Juwan Johnson</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 4)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 6)</span> <strong>The Sam Obliterators </strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Luther Burden III</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>MVPete</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 6)</span> <strong>Believe Dat</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>Mark's Magnificent Munch</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Malik Nabers</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Drake Maye Believers</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 10)</span> <strong>Believe Dat</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Ollie Gordon II</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>MVPete</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 6)</span> <strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Mark's Magnificent Munch</strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Stefon Diggs</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Walkin' On Sunshine</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 9)</span> <strong>The Sam Obliterators </strong></td>
+        </tr>
+        
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">Tre Tucker</td>
+          <td><span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">2x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;"><strong>Mark's Magnificent Munch</strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 7)</span> <strong>The Sam Obliterators </strong> <span style='color:#64748b;font-size:11px;'>&rarr; (Wk 8)</span> <strong>Mark's Magnificent Munch</strong></td>
+        </tr>
+        </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
+    let webInitialized = false;
     function switchPage(pageId, btn) {
       document.getElementById('luckPage').style.display = (pageId === 'luckPage') ? 'block' : 'none';
       document.getElementById('txPage').style.display = (pageId === 'txPage') ? 'block' : 'none';
+      document.getElementById('webPage').style.display = (pageId === 'webPage') ? 'block' : 'none';
       document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+
+      // Render Vis.js network once tab becomes visible so canvas dimensions calculate accurately
+      if (pageId === 'webPage' && !webInitialized) {
+        webInitialized = true;
+        const container = document.getElementById('tradeWebNet');
+        const netData = {
+          nodes: new vis.DataSet([{"id": 1, "label": "MVPete\n(6 trades)", "value": 6, "color": {"background": "#2563eb", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 2, "label": "Repeat Offender\n(2 trades)", "value": 2, "color": {"background": "#dc2626", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 3, "label": "The Sam Obliterators \n(8 trades)", "value": 8, "color": {"background": "#16a34a", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 4, "label": "Believe Dat\n(5 trades)", "value": 5, "color": {"background": "#d97706", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 5, "label": "Mark's Magnificent Munch\n(14 trades)", "value": 14, "color": {"background": "#7c3aed", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 6, "label": "Drake Maye Believers\n(2 trades)", "value": 2, "color": {"background": "#0891b2", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 7, "label": "Walkin' On Sunshine\n(9 trades)", "value": 9, "color": {"background": "#db2777", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}, {"id": 8, "label": "Nathan's Nifty Team\n(4 trades)", "value": 4, "color": {"background": "#475569", "border": "#0f172a"}, "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": true}}]),
+          edges: new vis.DataSet([{"from": 1, "to": 5, "value": 3, "label": "3x (Wk 7, Wk 8, Wk 10)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 3, "to": 4, "value": 1, "label": "1x (Wk 10)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 4, "to": 5, "value": 1, "label": "1x (Wk 10)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 2, "to": 3, "value": 1, "label": "1x (Wk 10)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 3, "to": 7, "value": 2, "label": "2x (Wk 8, Wk 9)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 5, "to": 7, "value": 4, "label": "4x (Wk 4, Wk 5, Wk 8, Wk 9)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 3, "to": 5, "value": 3, "label": "3x (Wk 6, Wk 7, Wk 8)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 4, "to": 8, "value": 2, "label": "2x (Wk 7, Wk 8)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 5, "to": 6, "value": 2, "label": "2x (Wk 3, Wk 8)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 2, "to": 7, "value": 1, "label": "1x (Wk 8)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 1, "to": 4, "value": 1, "label": "1x (Wk 6)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 5, "to": 8, "value": 1, "label": "1x (Wk 6)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 1, "to": 7, "value": 1, "label": "1x (Wk 6)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 7, "to": 8, "value": 1, "label": "1x (Wk 5)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}, {"from": 1, "to": 3, "value": 1, "label": "1x (Wk 4)", "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"}, "color": {"color": "#64748b", "highlight": "#2563eb"}}])
+        };
+        const netOptions = {
+          nodes: { shape: 'dot', scaling: { min: 16, max: 36 } },
+          edges: { scaling: { min: 1.5, max: 7 }, smooth: { type: 'continuous' } },
+          physics: { barnesHut: { gravitationalConstant: -4500, springLength: 210 } }
+        };
+        new vis.Network(container, netData, netOptions);
+      }
     }
 
     const weekLabels = ["Wk 1", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7", "Wk 8", "Wk 9", "Wk 10 (Live)"];
