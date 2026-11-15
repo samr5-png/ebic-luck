@@ -1,5 +1,6 @@
 import os
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 import requests
@@ -381,10 +382,9 @@ def build_master_site():
     team_trade_count = {tid: 0 for tid in teams}
     graded_trades = []
 
-    # Track pair trade counts & most-traded player chains for Tab 3
-    pair_counts = {}          # (min_tid, max_tid) -> count
-    pair_details = {}         # (min_tid, max_tid) -> list of "Wk X"
-    player_trade_chains = {}  # pid -> list of (ts, week, from_id, to_id)
+    pair_counts = {}
+    pair_details = {}
+    player_trade_chains = {}
 
     for tr in sorted(grouped_trades.values(), key=lambda x: (x["week"], x["ts"]), reverse=True):
         wk, ts = tr["week"], tr["ts"]
@@ -425,17 +425,31 @@ def build_master_site():
             "impact": abs(diff), "winner_id": t1 if diff > 0 else (t2 if diff < 0 else None)
         })
 
-    # Build clean Vis.js nodes & aggregated pair edges for Tab 3
-    web_nodes = [
-        {
+    # Clean circular-layout Vis.js nodes & aggregated pair edges for Tab 3
+    radius = 235
+    ordered_web_ids = sorted(team_ids, key=lambda tid: team_trade_count[tid], reverse=True)
+    ring_order = []
+    left, right = 0, len(ordered_web_ids) - 1
+    while left <= right:
+        ring_order.append(ordered_web_ids[left])
+        if left != right:
+            ring_order.append(ordered_web_ids[right])
+        left += 1
+        right -= 1
+
+    web_nodes = []
+    for idx, tid in enumerate(ring_order):
+        angle = (2 * math.pi * idx) / len(ring_order) - (math.pi / 2)
+        cnt = team_trade_count[tid]
+        web_nodes.append({
             "id": tid,
-            "label": f"{teams[tid]}\n({team_trade_count[tid]} trade{'s' if team_trade_count[tid] != 1 else ''})",
-            "value": max(1, team_trade_count[tid]),
+            "x": round(radius * math.cos(angle), 1),
+            "y": round(radius * math.sin(angle), 1),
+            "label": f"{teams[tid]}\n({cnt} trade{'s' if cnt != 1 else ''})",
+            "size": 18 + (cnt * 1.5),
             "color": {"background": team_colors[tid], "border": "#0f172a"},
             "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": True}
-        }
-        for tid in team_ids
-    ]
+        })
 
     web_edges = []
     for (u, v), cnt in pair_counts.items():
@@ -443,13 +457,21 @@ def build_master_site():
         web_edges.append({
             "from": u,
             "to": v,
-            "value": cnt,
-            "label": f"{cnt}x ({wks_str})",
-            "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"},
-            "color": {"color": "#64748b", "highlight": "#2563eb"}
+            "width": 1.5 + (cnt * 1.5),
+            "label": f"{cnt}x",
+            "title": f"{teams[u]} ↔ {teams[v]}: {cnt} trade{'s' if cnt != 1 else ''} ({wks_str})",
+            "font": {
+                "size": 12,
+                "align": "horizontal",
+                "background": "#ffffff",
+                "color": "#0f172a",
+                "strokeWidth": 3,
+                "strokeColor": "#ffffff"
+            },
+            "color": {"color": "#94a3b8", "highlight": "#2563eb", "hover": "#2563eb"}
         })
 
-    # Build Most-Traded Players ("Hot Potato") rows
+    # Most-Traded Players ("Hot Potatoes") table
     hot_potato_list = []
     for pid, chain in player_trade_chains.items():
         chain.sort(key=lambda x: (x[0], x[1]))
@@ -467,7 +489,7 @@ def build_master_site():
     hot_potato_rows = ""
     for hp in hot_potato_list:
         if hp["count"] < 2:
-            continue  # Show all players traded 2+ times
+            continue
         badge_bg = "#fee2e2" if hp["count"] >= 3 else "#fef3c7"
         badge_col = "#b91c1c" if hp["count"] >= 3 else "#b45309"
         hot_potato_rows += f"""
@@ -653,7 +675,7 @@ def build_master_site():
     .sub-tab {{ padding: 7px 13px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; }}
     .sub-tab.active {{ background: #0f172a; color: #ffffff; border-color: #0f172a; }}
     select {{ padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: 600; color: #0f172a; background: #f8fafc; }}
-    #tradeWebNet {{ width: 100%; height: 460px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fafafa; }}
+    #tradeWebNet {{ width: 100%; height: 540px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fafafa; }}
   </style>
 </head>
 <body>
@@ -735,7 +757,7 @@ def build_master_site():
     <div id="webPage" style="display:none;">
       <div class="card">
         <h1>Manager Trade Partner Web ({len(graded_trades)} Trades)</h1>
-        <div class="sub">Line thickness and labels show total deals completed between each pair of managers &bull; Drag nodes to rearrange</div>
+        <div class="sub">Line thickness and badges show total trades between each pair &bull; Hover over any line to see the exact weeks they traded</div>
         <div id="tradeWebNet"></div>
       </div>
 
@@ -765,7 +787,6 @@ def build_master_site():
       document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
 
-      // Render Vis.js network once tab becomes visible so canvas dimensions calculate accurately
       if (pageId === 'webPage' && !webInitialized) {{
         webInitialized = true;
         const container = document.getElementById('tradeWebNet');
@@ -774,11 +795,13 @@ def build_master_site():
           edges: new vis.DataSet({json.dumps(web_edges)})
         }};
         const netOptions = {{
-          nodes: {{ shape: 'dot', scaling: {{ min: 16, max: 36 }} }},
-          edges: {{ scaling: {{ min: 1.5, max: 7 }}, smooth: {{ type: 'continuous' }} }},
-          physics: {{ barnesHut: {{ gravitationalConstant: -4500, springLength: 210 }} }}
+          nodes: {{ shape: 'dot', borderWidth: 2 }},
+          edges: {{ smooth: {{ type: 'curvedCW', roundness: 0.12 }} }},
+          interaction: {{ hover: true, tooltipDelay: 100 }},
+          physics: false
         }};
-        new vis.Network(container, netData, netOptions);
+        const network = new vis.Network(container, netData, netOptions);
+        network.fit({{ animation: false }});
       }}
     }}
 
