@@ -39,8 +39,6 @@ def _sum_entries(entries, current_week):
                 elif st.get("statSourceId") == 1:
                     proj_pts = float(st.get("appliedTotal", 0.0))
 
-        # ESPN dynamically updates statSourceId == 1 during live games (e.g., 12.42 live -> 24.8 live proj).
-        # Once a game finishes, statSourceId == 1 equals final actual points (or use max of actual & proj).
         if actual_pts is not None and proj_pts is not None:
             total_proj += max(actual_pts, proj_pts) if proj_pts > 0 else actual_pts
         elif proj_pts is not None:
@@ -109,7 +107,6 @@ def build_master_site():
         h_live = float(m["home"].get("totalPointsLive", m["home"].get("totalPoints", 0.0)))
         a_live = float(m["away"].get("totalPointsLive", m["away"].get("totalPoints", 0.0)))
 
-        # Use ESPN's live dynamic projection (totalProjectedPointsLive) when active; fallback to starter sum
         h_live_proj = float(m["home"].get("totalProjectedPointsLive") or 0.0)
         a_live_proj = float(m["away"].get("totalProjectedPointsLive") or 0.0)
         h_proj = h_live_proj if h_live_proj > 0 else float(roster_projs.get(h_id) or h_live)
@@ -216,6 +213,42 @@ def build_master_site():
             final_proj_wins = sim_w.mean(axis=0)
             final_playoff_pct = playoff_pcts
             final_last_pct = last_pcts
+            # Store team true-strength PPG (blended_means) for Remaining SOS calculation
+            team_strength_ppg = {tid: float(blended_means[id_to_idx[tid]]) for tid in team_ids}
+
+    # --- CALCULATE STRENGTH OF SCHEDULE (SOS) & REMAINING SOS ---
+    # Past SOS: average actual PPG scored against each team in completed weeks (1 .. current_week - 1)
+    # Remaining SOS: average opponent true-strength PPG for remaining weeks (current_week .. 14)
+    past_opp_pts = {tid: [] for tid in team_ids}
+    rem_opp_ppg = {tid: [] for tid in team_ids}
+
+    for _, row in sched_df.iterrows():
+        wk = row["week"]
+        h_id, a_id = row["home_id"], row["away_id"]
+        if wk < current_week:
+            past_opp_pts[h_id].append(row["away_live"])
+            past_opp_pts[a_id].append(row["home_live"])
+        else:
+            # For current live week, use opponent's live projection; for future weeks, use opponent's blended PPG
+            h_opp_val = row["away_proj"] if (wk == current_week and row["away_proj"] > 0) else team_strength_ppg[a_id]
+            a_opp_val = row["home_proj"] if (wk == current_week and row["home_proj"] > 0) else team_strength_ppg[h_id]
+            rem_opp_ppg[h_id].append(h_opp_val)
+            rem_opp_ppg[a_id].append(a_opp_val)
+
+    sos_ppg = {
+        tid: (float(np.mean(past_opp_pts[tid])) if past_opp_pts[tid] else 0.0)
+        for tid in team_ids
+    }
+    rem_sos_ppg = {
+        tid: (float(np.mean(rem_opp_ppg[tid])) if rem_opp_ppg[tid] else 0.0)
+        for tid in team_ids
+    }
+
+    # Rank 1 = Hardest schedule (highest opponent PPG), Rank N = Easiest schedule
+    sos_sorted = sorted(team_ids, key=lambda t: sos_ppg[t], reverse=True)
+    rem_sos_sorted = sorted(team_ids, key=lambda t: rem_sos_ppg[t], reverse=True)
+    sos_rank = {tid: rank + 1 for rank, tid in enumerate(sos_sorted)}
+    rem_sos_rank = {tid: rank + 1 for rank, tid in enumerate(rem_sos_sorted)}
 
     weekly_rows = []
     for _, row in sched_df[sched_df["played"]].iterrows():
@@ -259,6 +292,10 @@ def build_master_site():
         curr_rows.append({"team_id": row["away_id"], "wk_live": row["away_live"], "wk_opp_live": row["home_live"], "wk_proj": row["away_proj"], "wk_win": 1.0 if row["away_live"] > row["home_live"] else (0.5 if row["away_live"] == row["home_live"] else 0.0)})
     summary = pd.merge(summary, pd.DataFrame(curr_rows), on="team_id", how="left").fillna(0.0)
 
+    summary["sos_ppg"] = summary["team_id"].map(sos_ppg)
+    summary["sos_rank"] = summary["team_id"].map(sos_rank)
+    summary["rem_sos_ppg"] = summary["team_id"].map(rem_sos_ppg)
+    summary["rem_sos_rank"] = summary["team_id"].map(rem_sos_rank)
     summary["proj_wins"] = summary["team_id"].map(lambda tid: final_proj_wins[id_to_idx[tid]])
     summary["playoff_pct"] = summary["team_id"].map(lambda tid: final_playoff_pct[id_to_idx[tid]])
     summary["last_place_pct"] = summary["team_id"].map(lambda tid: final_last_pct[id_to_idx[tid]])
@@ -558,6 +595,16 @@ def build_master_site():
         sign = "+" if val > 0 else ""
         return f'<span style="background:{bg};color:{color};padding:3px 8px;border-radius:6px;font-weight:600;">{sign}{val:.2f}</span>'
 
+    def sos_badge(ppg, rank, total_teams):
+        # Top 2 hardest = red pill, bottom 2 easiest = green pill, middle = neutral
+        if rank <= 2:
+            bg, color = "#fee2e2", "#b91c1c"
+        elif rank >= total_teams - 1:
+            bg, color = "#dcfce7", "#15803d"
+        else:
+            bg, color = "#f1f5f9", "#334155"
+        return f'<span style="background:{bg};color:{color};padding:3px 7px;border-radius:6px;font-weight:600;white-space:nowrap;">#{rank} ({ppg:.1f})</span>'
+
     rows_html = ""
     for idx, r in summary.iterrows():
         wk_color = "#15803d" if r["wk_win"] == 1 else ("#b91c1c" if r["wk_win"] == 0 else "#64748b")
@@ -573,6 +620,8 @@ def build_master_site():
             <td>{r['exp_wins']:.2f}</td>
             <td>{badge(r['live_luck'])}</td>
             <td>{badge(r['luck_delta'])}</td>
+            <td>{sos_badge(r['sos_ppg'], int(r['sos_rank']), num_teams)}</td>
+            <td>{sos_badge(r['rem_sos_ppg'], int(r['rem_sos_rank']), num_teams)}</td>
             <td style="font-weight:600;">{r['proj_wins']:.2f}</td>
             <td style="font-weight:700;color:#1d4ed8;">{r['playoff_pct']:.1f}%</td>
             <td style="font-weight:700;color:{'#b91c1c' if r['last_place_pct'] >= 15 else '#475569'};">{r['last_place_pct']:.1f}%</td>
@@ -669,22 +718,22 @@ def build_master_site():
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #1e293b; margin: 0; padding: 0; }}
     .navbar {{ background: #0f172a; color: #fff; padding: 14px 20px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }}
-    .nav-inner {{ max-width: 1150px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }}
+    .nav-inner {{ max-width: 1220px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }}
     .brand {{ font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }}
     .nav-tabs {{ display: flex; gap: 8px; flex-wrap: wrap; }}
     .main-tab {{ padding: 8px 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }}
     .main-tab:hover {{ background: #334155; color: #fff; }}
     .main-tab.active {{ background: #2563eb; color: #ffffff; border-color: #2563eb; }}
     .page-wrap {{ padding: 18px 16px; }}
-    .card {{ max-width: 1150px; margin: 0 auto 20px auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); padding: 20px; overflow-x: auto; }}
+    .card {{ max-width: 1220px; margin: 0 auto 20px auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); padding: 20px; overflow-x: auto; }}
     h1, h2 {{ margin: 0 0 6px 0; color: #0f172a; }}
     h1 {{ font-size: 20px; }}
     h2 {{ font-size: 17px; }}
     .sub {{ color: #64748b; font-size: 12px; margin-bottom: 16px; }}
-    table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 650px; }}
-    th {{ background: #0f172a; color: #fff; padding: 10px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 980px; }}
+    th {{ background: #0f172a; color: #fff; padding: 10px 7px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }}
     th:nth-child(2) {{ text-align: left; }}
-    td {{ padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }}
+    td {{ padding: 10px 7px; border-bottom: 1px solid #e2e8f0; }}
     tr:hover {{ background: #f8fafc; }}
     .footer {{ margin-top: 14px; font-size: 11px; color: #64748b; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }}
     .chart-box {{ position: relative; height: 360px; width: 100%; }}
@@ -719,14 +768,16 @@ def build_master_site():
             <tr>
               <th>Rank</th><th>Team</th><th>Live Rec</th><th>Total PF</th><th>Total PA</th>
               <th>Wk {current_week} Live</th><th>Wk {current_week} Proj</th><th>Exp Wins</th>
-              <th>Live Luck</th><th>Wk {current_week} Luck &Delta;</th><th>Proj Wins</th>
-              <th>Playoff %</th><th>Last Place %</th>
+              <th>Live Luck</th><th>Wk {current_week} Luck &Delta;</th>
+              <th>SOS</th><th>Rem SOS</th>
+              <th>Proj Wins</th><th>Playoff %</th><th>Last Place %</th>
             </tr>
           </thead>
           <tbody>{rows_html}</tbody>
         </table>
         <div class="footer">
           <span><strong>Live Luck:</strong> Live Wins &minus; Pythagorean Expected Wins (k=4)</span>
+          <span><strong>SOS / Rem SOS:</strong> Rank #1 = Hardest (#{num_teams} = Easiest) by Opponent Avg PPG</span>
           <span><strong>Wk {current_week} Luck &Delta;:</strong> Net luck added/removed since end of Week {max(1, current_week - 1)}</span>
         </div>
       </div>
