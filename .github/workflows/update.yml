@@ -1,39 +1,57 @@
 name: Update EBIC Live Luck Dashboard
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
   schedule:
+    # Run every 15 minutes during Sunday (17:00-23:59 UTC) and Monday/Thursday night games (00:00-04:59 UTC)
     - cron: '*/15 17-23 * * 0'
     - cron: '*/15 0-4 * * 1,2,5'
+    # Run at the top of every hour all week long for pre-game lineup/waiver updates
+    - cron: '0 * * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
-  build-and-deploy:
+  update-dashboard:
     runs-on: ubuntu-latest
+    concurrency:
+      group: dashboard-deploy
+      cancel-in-progress: true
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: pip install requests numpy pandas
 
-      - name: Run luck & projection engine
+      - name: Generate updated index.html
         env:
           SWID: ${{ secrets.SWID }}
           ESPN_S2: ${{ secrets.ESPN_S2 }}
         run: python update_dashboard.py
 
-      - name: Commit updated index.html
+      - name: Commit and push updated index.html
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update live scores" && git push)
+          if ! git diff --staged --quiet; then
+            git commit -m "Auto-update dashboard $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase origin main
+            git push origin main
+          else
+            echo "No changes to index.html"
+          fi
