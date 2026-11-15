@@ -257,7 +257,7 @@ def build_master_site():
         for _, r in summary.sort_values("last_place_pct", ascending=False).iterrows()
     ]
 
-    # --- 3. FETCH HISTORICAL BOXSCORES & TRANSACTIONS FOR TAB 2 ---
+    # --- 3. FETCH HISTORICAL BOXSCORES & TRANSACTIONS FOR TABS 2 & 3 ---
     weekly_pts = {}
     started_set = set()
     player_names = {}
@@ -381,6 +381,11 @@ def build_master_site():
     team_trade_count = {tid: 0 for tid in teams}
     graded_trades = []
 
+    # Track pair trade counts & most-traded player chains for Tab 3
+    pair_counts = {}          # (min_tid, max_tid) -> count
+    pair_details = {}         # (min_tid, max_tid) -> list of "Wk X"
+    player_trade_chains = {}  # pid -> list of (ts, week, from_id, to_id)
+
     for tr in sorted(grouped_trades.values(), key=lambda x: (x["week"], x["ts"]), reverse=True):
         wk, ts = tr["week"], tr["ts"]
         involved_names = {player_names.get(pid, "") for _, _, pid in tr["legs"]}
@@ -393,12 +398,17 @@ def build_master_site():
             pts, _, note = get_started_tenure_points(pid, t_id, ts, wk)
             team_acquired.setdefault(t_id, []).append((f"{player_names.get(pid, f'#{pid}')}{note}", pts))
             team_acquired.setdefault(f_id, [])
+            player_trade_chains.setdefault(pid, []).append((ts, wk, f_id, t_id))
 
         involved = list(team_acquired.keys())
         if len(involved) != 2:
             continue
 
         t1, t2 = involved[0], involved[1]
+        pair_key = (min(t1, t2), max(t1, t2))
+        pair_counts[pair_key] = pair_counts.get(pair_key, 0) + 1
+        pair_details.setdefault(pair_key, []).append(f"Wk {wk}")
+
         t1_total = round(sum(p for _, p in team_acquired[t1]), 1)
         t2_total = round(sum(p for _, p in team_acquired[t2]), 1)
         diff = round(t1_total - t2_total, 1)
@@ -414,6 +424,59 @@ def build_master_site():
             "t2_id": t2, "t2_name": teams.get(t2, "Team 2"), "t2_assets": team_acquired[t2], "t2_total": t2_total,
             "impact": abs(diff), "winner_id": t1 if diff > 0 else (t2 if diff < 0 else None)
         })
+
+    # Build clean Vis.js nodes & aggregated pair edges for Tab 3
+    web_nodes = [
+        {
+            "id": tid,
+            "label": f"{teams[tid]}\n({team_trade_count[tid]} trade{'s' if team_trade_count[tid] != 1 else ''})",
+            "value": max(1, team_trade_count[tid]),
+            "color": {"background": team_colors[tid], "border": "#0f172a"},
+            "font": {"color": "#0f172a", "size": 13, "face": "sans-serif", "bold": True}
+        }
+        for tid in team_ids
+    ]
+
+    web_edges = []
+    for (u, v), cnt in pair_counts.items():
+        wks_str = ", ".join(reversed(pair_details[(u, v)]))
+        web_edges.append({
+            "from": u,
+            "to": v,
+            "value": cnt,
+            "label": f"{cnt}x ({wks_str})",
+            "font": {"size": 11, "align": "middle", "background": "#ffffff", "color": "#334155"},
+            "color": {"color": "#64748b", "highlight": "#2563eb"}
+        })
+
+    # Build Most-Traded Players ("Hot Potato") rows
+    hot_potato_list = []
+    for pid, chain in player_trade_chains.items():
+        chain.sort(key=lambda x: (x[0], x[1]))
+        count = len(chain)
+        route_parts = [f"<strong>{teams.get(chain[0][2], 'Team')}</strong>"]
+        for _, w, _, to_id in chain:
+            route_parts.append(f"<span style='color:#64748b;font-size:11px;'>&rarr; (Wk {w})</span> <strong>{teams.get(to_id, 'Team')}</strong>")
+        hot_potato_list.append({
+            "name": player_names.get(pid, f"Player #{pid}"),
+            "count": count,
+            "route_html": " ".join(route_parts)
+        })
+
+    hot_potato_list.sort(key=lambda x: (-x["count"], x["name"]))
+    hot_potato_rows = ""
+    for hp in hot_potato_list:
+        if hp["count"] < 2:
+            continue  # Show all players traded 2+ times
+        badge_bg = "#fee2e2" if hp["count"] >= 3 else "#fef3c7"
+        badge_col = "#b91c1c" if hp["count"] >= 3 else "#b45309"
+        hot_potato_rows += f"""
+        <tr>
+          <td style="font-weight:700;color:#0f172a;text-align:left;">{hp['name']}</td>
+          <td><span style="background:{badge_bg};color:{badge_col};padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;">{hp['count']}x Traded</span></td>
+          <td style="text-align:left;line-height:1.6;">{hp['route_html']}</td>
+        </tr>
+        """
 
     team_waiver_pts = {tid: 0.0 for tid in teams}
     team_pickup_count = {tid: 0 for tid in teams}
@@ -445,7 +508,7 @@ def build_master_site():
         for tid in sorted_tx_teams
     )
 
-    # --- 4. RENDER COMBINED HTML WITH TOP NAVIGATION TABS ---
+    # --- 4. RENDER COMBINED HTML WITH THREE TOP TABS ---
     def fmt_rec(w, l):
         return f"{int(w)}-{int(l)}" if w % 1 == 0 else f"{w:.1f}-{l:.1f}"
 
@@ -562,12 +625,13 @@ def build_master_site():
   <meta http-equiv="refresh" content="300">
   <title>EBIC 2026-7 Analytics Hub</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #1e293b; margin: 0; padding: 0; }}
     .navbar {{ background: #0f172a; color: #fff; padding: 14px 20px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }}
     .nav-inner {{ max-width: 1150px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }}
     .brand {{ font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }}
-    .nav-tabs {{ display: flex; gap: 8px; }}
+    .nav-tabs {{ display: flex; gap: 8px; flex-wrap: wrap; }}
     .main-tab {{ padding: 8px 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }}
     .main-tab:hover {{ background: #334155; color: #fff; }}
     .main-tab.active {{ background: #2563eb; color: #ffffff; border-color: #2563eb; }}
@@ -577,7 +641,7 @@ def build_master_site():
     h1 {{ font-size: 20px; }}
     h2 {{ font-size: 17px; }}
     .sub {{ color: #64748b; font-size: 12px; margin-bottom: 16px; }}
-    table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 850px; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; min-width: 650px; }}
     th {{ background: #0f172a; color: #fff; padding: 10px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }}
     th:nth-child(2) {{ text-align: left; }}
     td {{ padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }}
@@ -589,6 +653,7 @@ def build_master_site():
     .sub-tab {{ padding: 7px 13px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; }}
     .sub-tab.active {{ background: #0f172a; color: #ffffff; border-color: #0f172a; }}
     select {{ padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: 600; color: #0f172a; background: #f8fafc; }}
+    #tradeWebNet {{ width: 100%; height: 460px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fafafa; }}
   </style>
 </head>
 <body>
@@ -598,6 +663,7 @@ def build_master_site():
       <div class="nav-tabs">
         <button class="main-tab active" onclick="switchPage('luckPage', this)">Luck &amp; Playoff Odds</button>
         <button class="main-tab" onclick="switchPage('txPage', this)">Trades &amp; Waiver Wire</button>
+        <button class="main-tab" onclick="switchPage('webPage', this)">Trade Web &amp; Hot Potatoes</button>
       </div>
     </div>
   </div>
@@ -664,14 +730,56 @@ def build_master_site():
         <div id="feedContainer">{feed_html}</div>
       </div>
     </div>
+
+    <!-- TAB 3: TRADE WEB & MOST TRADED PLAYERS -->
+    <div id="webPage" style="display:none;">
+      <div class="card">
+        <h1>Manager Trade Partner Web ({len(graded_trades)} Trades)</h1>
+        <div class="sub">Line thickness and labels show total deals completed between each pair of managers &bull; Drag nodes to rearrange</div>
+        <div id="tradeWebNet"></div>
+      </div>
+
+      <div class="card">
+        <h2>Most-Traded Players ("Hot Potatoes")</h2>
+        <div class="sub">Players dealt 2 or more times this season with their chronological ownership path</div>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;">Player</th>
+              <th>Times Traded</th>
+              <th style="text-align:left;">Ownership Chain</th>
+            </tr>
+          </thead>
+          <tbody>{hot_potato_rows or '<tr><td colspan="3" style="color:#64748b;">No players traded multiple times yet.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
+    let webInitialized = false;
     function switchPage(pageId, btn) {{
       document.getElementById('luckPage').style.display = (pageId === 'luckPage') ? 'block' : 'none';
       document.getElementById('txPage').style.display = (pageId === 'txPage') ? 'block' : 'none';
+      document.getElementById('webPage').style.display = (pageId === 'webPage') ? 'block' : 'none';
       document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+
+      // Render Vis.js network once tab becomes visible so canvas dimensions calculate accurately
+      if (pageId === 'webPage' && !webInitialized) {{
+        webInitialized = true;
+        const container = document.getElementById('tradeWebNet');
+        const netData = {{
+          nodes: new vis.DataSet({json.dumps(web_nodes)}),
+          edges: new vis.DataSet({json.dumps(web_edges)})
+        }};
+        const netOptions = {{
+          nodes: {{ shape: 'dot', scaling: {{ min: 16, max: 36 }} }},
+          edges: {{ scaling: {{ min: 1.5, max: 7 }}, smooth: {{ type: 'continuous' }} }},
+          physics: {{ barnesHut: {{ gravitationalConstant: -4500, springLength: 210 }} }}
+        }};
+        new vis.Network(container, netData, netOptions);
+      }}
     }}
 
     const weekLabels = {json.dumps(week_labels)};
@@ -764,6 +872,7 @@ def build_master_site():
 </html>"""
 
     Path("index.html").write_text(html, encoding="utf-8")
+
 
 if __name__ == "__main__":
     build_master_site()
