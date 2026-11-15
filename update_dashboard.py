@@ -24,18 +24,29 @@ BASE_URL = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{SE
 def _sum_entries(entries, current_week):
     total_proj = 0.0
     for entry in entries:
+        # 20 = Bench, 21 = IR; only sum active starters
         if entry.get("lineupSlotId") in (20, 21):
             continue
-        player = entry.get("playerPoolEntry", {}).get("player", {})
+        ppe = entry.get("playerPoolEntry", {})
+        player = ppe.get("player", {})
+
         actual_pts = None
-        proj_pts = 0.0
+        proj_pts = None
         for st in player.get("stats", []):
             if st.get("scoringPeriodId") == current_week:
                 if st.get("statSourceId") == 0:
                     actual_pts = float(st.get("appliedTotal", 0.0))
                 elif st.get("statSourceId") == 1:
                     proj_pts = float(st.get("appliedTotal", 0.0))
-        total_proj += actual_pts if actual_pts is not None else proj_pts
+
+        # Prefer actual scored points if already played, then current week projection, then appliedStatTotal
+        if actual_pts is not None:
+            total_proj += actual_pts
+        elif proj_pts is not None:
+            total_proj += proj_pts
+        else:
+            total_proj += float(ppe.get("appliedStatTotal", 0.0))
+
     return round(total_proj, 2)
 
 
@@ -65,12 +76,12 @@ def get_starting_lineup_projections(data, current_week):
 def build_master_site():
     active_cookies = {k: v for k, v in COOKIES.items() if v}
 
-    # --- 1. FETCH CURRENT WEEK & LIVE ROSTERS/SCORES ---
+    # --- 1. FETCH CURRENT WEEK & LIVE ROSTERS/BOXSCORES ---
     meta_resp = requests.get(BASE_URL, cookies=active_cookies)
     meta_resp.raise_for_status()
     current_week = meta_resp.json()["scoringPeriodId"]
 
-    full_url = f"{BASE_URL}?scoringPeriodId={current_week}&view=mTeam&view=mMatchup&view=mMatchupScore&view=mRoster"
+    full_url = f"{BASE_URL}?scoringPeriodId={current_week}&view=mTeam&view=mMatchup&view=mMatchupScore&view=mRoster&view=mBoxscore"
     resp = requests.get(full_url, cookies=active_cookies)
     resp.raise_for_status()
     data = resp.json()
@@ -94,8 +105,10 @@ def build_master_site():
         h_id, a_id = m["home"]["teamId"], m["away"]["teamId"]
         h_live = float(m["home"].get("totalPointsLive", m["home"].get("totalPoints", 0.0)))
         a_live = float(m["away"].get("totalPointsLive", m["away"].get("totalPoints", 0.0)))
-        h_proj = float(m["home"].get("totalProjectedPointsLive") or roster_projs.get(h_id, h_live))
-        a_proj = float(m["away"].get("totalProjectedPointsLive") or roster_projs.get(a_id, a_live))
+
+        # Always prioritize live active-starter sum over ESPN's cached totalProjectedPointsLive
+        h_proj = float(roster_projs.get(h_id) or m["home"].get("totalProjectedPointsLive") or h_live)
+        a_proj = float(roster_projs.get(a_id) or m["away"].get("totalProjectedPointsLive") or a_live)
 
         games.append({
             "week": week, "home_id": h_id, "away_id": a_id,
