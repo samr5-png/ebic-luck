@@ -39,11 +39,14 @@ def _sum_entries(entries, current_week):
                 elif st.get("statSourceId") == 1:
                     proj_pts = float(st.get("appliedTotal", 0.0))
 
-        # Prefer actual scored points if already played, then current week projection, then appliedStatTotal
-        if actual_pts is not None:
-            total_proj += actual_pts
+        # ESPN dynamically updates statSourceId == 1 during live games (e.g., 12.42 live -> 24.8 live proj).
+        # Once a game finishes, statSourceId == 1 equals final actual points (or use max of actual & proj).
+        if actual_pts is not None and proj_pts is not None:
+            total_proj += max(actual_pts, proj_pts) if proj_pts > 0 else actual_pts
         elif proj_pts is not None:
             total_proj += proj_pts
+        elif actual_pts is not None:
+            total_proj += actual_pts
         else:
             total_proj += float(ppe.get("appliedStatTotal", 0.0))
 
@@ -106,9 +109,11 @@ def build_master_site():
         h_live = float(m["home"].get("totalPointsLive", m["home"].get("totalPoints", 0.0)))
         a_live = float(m["away"].get("totalPointsLive", m["away"].get("totalPoints", 0.0)))
 
-        # Always prioritize live active-starter sum over ESPN's cached totalProjectedPointsLive
-        h_proj = float(roster_projs.get(h_id) or m["home"].get("totalProjectedPointsLive") or h_live)
-        a_proj = float(roster_projs.get(a_id) or m["away"].get("totalProjectedPointsLive") or a_live)
+        # Use ESPN's live dynamic projection (totalProjectedPointsLive) when active; fallback to starter sum
+        h_live_proj = float(m["home"].get("totalProjectedPointsLive") or 0.0)
+        a_live_proj = float(m["away"].get("totalProjectedPointsLive") or 0.0)
+        h_proj = h_live_proj if h_live_proj > 0 else float(roster_projs.get(h_id) or h_live)
+        a_proj = a_live_proj if a_live_proj > 0 else float(roster_projs.get(a_id) or a_live)
 
         games.append({
             "week": week, "home_id": h_id, "away_id": a_id,
