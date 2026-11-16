@@ -54,7 +54,7 @@
     <div id="luckPage">
       <div class="card">
         <h1>Live Luck &amp; Playoff Projections (Week 10)</h1>
-        <div class="sub">Last Synced: Nov 16, 2026 13:01 UTC &bull; Auto-refreshes every 5 min &bull; 10,000 Monte Carlo Sims (Top 4 Playoffs, PF Tiebreaker)</div>
+        <div class="sub">Last Synced: Nov 16, 2026 15:08 UTC &bull; Auto-refreshes every 5 min &bull; 10,000 Monte Carlo Sims (Top 4 Playoffs, PF Tiebreaker)</div>
         <table>
           <thead>
             <tr>
@@ -234,7 +234,7 @@
     <!-- TAB 2: TRADES & WAIVER WIRE -->
     <div id="txPage" style="display:none;">
       <div class="card">
-        <h1>Combined Trade &amp; Waiver Wire Value (25 Trades, 259 Pickups)</h1>
+        <h1>Combined Trade &amp; Waiver Wire Value (25 Trades, 258 Pickups)</h1>
         <div class="sub">Net Trade Starter Points + Waiver/FA Starter Points scored <strong>only while started</strong> before being dropped or re-traded (Weeks 1–10)</div>
         <div style="height: 330px; width: 100%;"><canvas id="combinedTxChart"></canvas></div>
       </div>
@@ -242,9 +242,9 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
           <div class="sub-tab-bar">
-            <button class="sub-tab active" onclick="setKind('ALL', this)">All Moves (284)</button>
+            <button class="sub-tab active" onclick="setKind('ALL', this)">All Moves (283)</button>
             <button class="sub-tab" onclick="setKind('TRADE', this)">Trades Only (25)</button>
-            <button class="sub-tab" onclick="setKind('PICKUP', this)">Waivers &amp; FA Only (259)</button>
+            <button class="sub-tab" onclick="setKind('PICKUP', this)">Waivers &amp; FA Only (258)</button>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <select id="teamFilter" onchange="applyFilters()"><option value="ALL">All Managers (Show Entire League)</option><option value="7">Walkin' On Sunshine (+432.0 total pts)</option><option value="8">Nathan's Nifty Team (+397.1 total pts)</option><option value="6">Drake Maye Believers (+301.9 total pts)</option><option value="3">The Sam Obliterators  (+263.0 total pts)</option><option value="4">Believe Dat (+161.3 total pts)</option><option value="1">MVPete (+157.4 total pts)</option><option value="2">Repeat Offender (+141.4 total pts)</option><option value="5">Mark's Magnificent Munch (+4.0 total pts)</option></select>
@@ -699,20 +699,6 @@
                   <span style="background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;">Free Agent</span>
                   <span style="font-size:12px;font-weight:700;color:#475569;">WEEK 10 (Nov 12)</span>
                   <span style="font-size:14px;color:#0f172a;"><strong>Nathan's Nifty Team</strong> added <strong>James Conner</strong></span>
-                  <span style="font-size:12px;color:#64748b;">(0 starts, dropped Wk 10)</span>
-                </div>
-                <div style="font-size:15px;font-weight:700;color:#64748b;">
-                  +0.0 starter pts
-                </div>
-              </div>
-            </div>
-            
-            <div class="tx-card" data-kind="PICKUP" data-t1="8" data-t2="" data-impact="0.0" data-ts="1794459876606">
-              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                  <span style="background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;">Free Agent</span>
-                  <span style="font-size:12px;font-weight:700;color:#475569;">WEEK 10 (Nov 12)</span>
-                  <span style="font-size:14px;color:#0f172a;"><strong>Nathan's Nifty Team</strong> added <strong>Philip Rivers</strong></span>
                   <span style="font-size:12px;color:#64748b;">(0 starts, dropped Wk 10)</span>
                 </div>
                 <div style="font-size:15px;font-weight:700;color:#64748b;">
@@ -3647,7 +3633,7 @@
               </div>
             </div>
             
-            <div class="tx-card" data-kind="TRADE" data-t1="3" data-t2="1" data-impact="62.6" data-ts="1790882959652">
+            <div class="tx-card" data-kind="TRADE" data-t1="1" data-t2="3" data-impact="62.6" data-ts="1790882959652">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">
                 <div style="display:flex;align-items:center;gap:8px;">
                   <span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">TRADE</span>
@@ -3656,16 +3642,6 @@
                 <span style="font-size:12px;font-weight:600;color:#64748b;">Margin: +62.6 pts</span>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px;">
-                    <strong style="font-size:14px;color:#0f172a;">The Sam Obliterators  Received</strong>
-                    <span style='background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;'>WINNER (+62.6 pts)</span>
-                  </div>
-                  <div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;'><span>Jaylen Warren (5 starts, traded Wk 10)</span><span style='font-weight:600;white-space:nowrap;margin-left:8px;'>100.2 pts</span></div><div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;'><span>Dalton Kincaid (2 starts)</span><span style='font-weight:600;white-space:nowrap;margin-left:8px;'>9.5 pts</span></div>
-                  <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:700;color:#0f172a;font-size:13px;">
-                    <span>Starter Points</span><span>109.7 pts</span>
-                  </div>
-                </div>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px;">
                     <strong style="font-size:14px;color:#0f172a;">MVPete Received</strong>
@@ -3674,6 +3650,16 @@
                   <div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;'><span>Tyler Warren (5 starts)</span><span style='font-weight:600;white-space:nowrap;margin-left:8px;'>47.1 pts</span></div>
                   <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:700;color:#0f172a;font-size:13px;">
                     <span>Starter Points</span><span>47.1 pts</span>
+                  </div>
+                </div>
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px;">
+                    <strong style="font-size:14px;color:#0f172a;">The Sam Obliterators  Received</strong>
+                    <span style='background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;'>WINNER (+62.6 pts)</span>
+                  </div>
+                  <div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;'><span>Jaylen Warren (5 starts, traded Wk 10)</span><span style='font-weight:600;white-space:nowrap;margin-left:8px;'>100.2 pts</span></div><div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;'><span>Dalton Kincaid (2 starts)</span><span style='font-weight:600;white-space:nowrap;margin-left:8px;'>9.5 pts</span></div>
+                  <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:700;color:#0f172a;font-size:13px;">
+                    <span>Starter Points</span><span>109.7 pts</span>
                   </div>
                 </div>
               </div>
@@ -4896,7 +4882,7 @@
     new Chart(document.getElementById('combinedTxChart').getContext('2d'), {
       type: 'bar',
       data: {
-        labels: ["Walkin' On Sunshine (9T / 38W)", "Nathan's Nifty Team (4T / 23W)", "Drake Maye Believers (2T / 21W)", "The Sam Obliterators  (8T / 28W)", "Believe Dat (5T / 28W)", "MVPete (6T / 23W)", "Repeat Offender (2T / 16W)", "Mark's Magnificent Munch (14T / 82W)"],
+        labels: ["Walkin' On Sunshine (9T / 38W)", "Nathan's Nifty Team (4T / 22W)", "Drake Maye Believers (2T / 21W)", "The Sam Obliterators  (8T / 28W)", "Believe Dat (5T / 28W)", "MVPete (6T / 23W)", "Repeat Offender (2T / 16W)", "Mark's Magnificent Munch (14T / 82W)"],
         datasets: [
           { label: 'Net Trade Starter Points', data: [234.5, 28.7, 139.7, 29.3, -133.5, -4.7, -8.6, -285.4], backgroundColor: '#16a34a', borderRadius: 4 },
           { label: 'Waiver / FA Starter Points', data: [197.5, 368.4, 162.2, 233.7, 294.8, 162.1, 150.0, 289.4], backgroundColor: '#2563eb', borderRadius: 4 }
